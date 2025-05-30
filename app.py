@@ -9,8 +9,8 @@ import time
 
 app = Flask(__name__)
 
-line_bot_api = LineBotApi('你的 LINE CHANNEL ACCESS TOKEN')
-handler = WebhookHandler('你的 LINE CHANNEL SECRET')
+line_bot_api = LineBotApi('BgnQvOHL4eDBoYj8/A11+Vxw3EIiMbCqRNFmwI87OYaL98louNY17OuFhWDXRoBzO2TJ5fwVIMuvVgNgalPOLD28jyAfX3ayIZrJ5TvgEy7CG7os9Gz+O9JS0y+S4ME7q4+KPq5ofMIlvSWpNTsMLAdB04t89/1O/w1cDnyilFU=')
+handler = WebhookHandler('3bea3ced2a7d267a563d87642bb288bb')
 
 conn = sqlite3.connect('esrp.db', check_same_thread=False)
 cursor = conn.cursor()
