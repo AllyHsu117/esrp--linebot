@@ -11,8 +11,8 @@ import os
 
 app = Flask(__name__)
 
-line_bot_api = LineBotApi(os.environ.get("BgnQvOHL4eDBoYj8/A11+Vxw3EIiMbCqRNFmwI87OYaL98louNY17OuFhWDXRoBzO2TJ5fwVIMuvVgNgalPOLD28jyAfX3ayIZrJ5TvgEy7CG7os9Gz+O9JS0y+S4ME7q4+KPq5ofMIlvSWpNTsMLAdB04t89/1O/w1cDnyilFU="))
-handler = WebhookHandler(os.environ.get("3bea3ced2a7d267a563d87642bb288bb"))
+line_bot_api = LineBotApi(os.environ.get("LINE_CHANNEL_ACCESS_TOKEN"))
+handler = WebhookHandler(os.environ.get("LINE_CHANNEL_SECRET"))
 
 # ===== 資料庫初始化 =====
 conn = sqlite3.connect('esrp.db', check_same_thread=False)
@@ -138,7 +138,7 @@ def handle_message(event):
         reply = "❌ 請輸入格式：RPE 時間（例如 6 60）"
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-    
+
 # ===== 定時任務 =====
 def daily_reminder():
     cursor.execute("SELECT user_id FROM whitelist WHERE role='球員'")
