@@ -281,15 +281,29 @@ def remind_players():
             uid = row["user_id"]
             line_bot_api.push_message(uid, TextSendMessage(text="🔔 請填寫今天的 RPE 與運動時間（格式如：6 60）"))
 
-for day in ["monday", "tuesday", "wednesday", "thursday", "friday"]:
-    getattr(schedule.every(), day).at("22:00").do(remind_players)
+from flask import Flask, request
+from datetime import datetime
+from linebot.models import TextSendMessage
 
-def run_scheduler():
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+@app.route("/daily_remind", methods=["GET"])
+def daily_remind():
+    now = datetime.now()
+    if now.hour == 22:
+        try:
+            rows = whitelist_sheet.get_all_records()
+            for row in rows:
+                if row["role"] == "球員":
+                    uid = row["user_id"]
+                    line_bot_api.push_message(
+                        uid,
+                        TextSendMessage(text="🔔 請填寫今天的 sRPE 數值與運動時間（格式如：6 60）")
+                    )
+            return "✅ Reminded all players at 22:00"
+        except Exception as e:
+            return f"❌ 發送提醒時出錯：{e}"
+    else:
+        return f"⌛ 現在不是推播時間：{now.strftime('%H:%M:%S')}"
 
-threading.Thread(target=run_scheduler).start()
 
 # ===== 啟動服務 =====
 if __name__ == "__main__":
