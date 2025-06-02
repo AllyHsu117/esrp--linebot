@@ -23,7 +23,10 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 import json
 import os
 from google.oauth2 import service_account
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
 GOOGLE_CREDS = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = service_account.Credentials.from_service_account_info(GOOGLE_CREDS, scopes=SCOPES)
