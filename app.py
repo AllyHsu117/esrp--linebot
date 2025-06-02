@@ -54,6 +54,11 @@ def callback():
         print("Handle Error:", e)
     return 'OK'
 
+#------ 判斷今天以已填寫的函數 -------
+def has_submitted_today(user_id):
+    today = datetime.now().strftime("%Y-%m-%d")
+    cursor.execute("SELECT COUNT(*) FROM esrp WHERE user_id=? AND timestamp LIKE ?", (user_id, today + "%"))
+    return cursor.fetchone()[0] > 0
 # ===== 主訊息邏輯 =====
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -67,29 +72,160 @@ def handle_message(event):
     row = cursor.fetchone()
 
     if not row:
-        if msg.startswith("驗證"):
-            code = msg.replace("驗證", "").strip()
-            if code in valid_codes:
-                role = valid_codes[code]
-                cursor.execute("INSERT OR REPLACE INTO whitelist (user_id, role) VALUES (?, ?)", (user_id, role))
-                conn.commit()
-                reply = f"✅ 驗證成功，您的身份是：{role}，歡迎使用！"
-            else:
-                reply = "❌ 驗證碼錯誤，請重新輸入。"
+        code = msg.strip()
+        if code in valid_codes:  # 🔧 直接判斷 msg 本身是不是驗證碼
+            role = valid_codes[code]
+            cursor.execute("INSERT OR REPLACE INTO whitelist (user_id, role) VALUES (?, ?)", (user_id, role))
+            conn.commit()
+            reply = f"✅ 驗證成功，您的身份是：{role}，歡迎使用！"
         else:
-            reply = "🚫 請先輸入 4 碼驗證碼（例如：驗證 1111）"
+            reply = "🚫 請先輸入 4 碼驗證碼（例如：1111）"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
         return
 
+
     role = row[0]
+
 
     # 教練 quick reply
     if msg.lower() in ["hi", "嘿", "欸", "誒", "hey"] and role == "教練":
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="教練您好，請選擇：\n- 查詢所有學生紀錄\n- 查詢 ACWR（開發中）")
+            TextSendMessage(
+                text="教練您好，請選擇操作：",
+                quick_reply=QuickReply(items=[
+                    QuickReplyButton(action=MessageAction(label="查詢未填學生", text="查詢未填")),
+                    QuickReplyButton(action=MessageAction(label="查詢今日回報", text="查詢今日回報")),
+                    QuickReplyButton(action=MessageAction(label="查詢 ACWR", text="查詢 ACWR")),
+                ])
+            )
         )
         return
+    if msg == "查詢未填":
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute("SELECT user_id FROM whitelist WHERE role='學生'")
+        all_students = [r[0] for r in cursor.fetchall()]
+        cursor.execute("SELECT DISTINCT user_id FROM esrp WHERE timestamp LIKE ?", (today_str + "%",))
+        filled_students = [r[0] for r in cursor.fetchall()]
+        not_filled = [uid for uid in all_students if uid not in filled_students]
+
+        names = []
+        for uid in not_filled:
+            try:
+                profile = line_bot_api.get_profile(uid)
+                names.append(profile.display_name)
+            except:
+                names.append(uid)
+
+        if not names:
+            reply = "✅ 今天所有學生都已填寫！"
+        else:
+            reply = "以下學生尚未填寫：\n" + "\n".join(names)
+
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        return
+    
+    if msg == "查詢今日回報":
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute("SELECT user_id FROM whitelist WHERE role='學生'")
+        all_students = [r[0] for r in cursor.fetchall()]
+
+        lines = []
+        total = 0
+        count = 0
+
+        for uid in all_students:
+            cursor.execute("SELECT srpe, note FROM esrp WHERE user_id=? AND timestamp LIKE ? ORDER BY id DESC LIMIT 1", (uid, today_str + "%"))
+            row = cursor.fetchone()
+
+            try:
+                profile = line_bot_api.get_profile(uid)
+                name = profile.display_name
+            except:
+                name = uid
+
+            if row:
+                srpe, note = row
+                if note == "請假":
+                    lines.append(f"{name}：請假")
+                    total += 0
+                    count += 1
+                else:
+                    lines.append(f"{name}：{srpe}")
+                    total += srpe
+                    count += 1
+            else:
+                lines.append(f"{name}：未填")
+
+        if count > 0:
+            avg = round(total / count, 1)
+            lines.append(f"\n平均 SRPE：{avg}（請假視為 0）")
+        else:
+            lines.append("\n尚無任何紀錄。")
+
+        reply = "\n".join(lines)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        return
+
+    if msg == "查詢 ACWR":
+        today = datetime.now().date()
+        this_monday = today - timedelta(days=today.weekday())  # 本週一
+        four_weeks_ago = this_monday - timedelta(weeks=4)      # 四週前
+
+        cursor.execute("SELECT user_id FROM whitelist WHERE role='學生'")
+        students = cursor.fetchall()
+
+        acwr_lines = []
+        team_acwrs = []
+
+        for (uid,) in students:
+            # 嘗試取得 LINE display name
+            try:
+                profile = line_bot_api.get_profile(uid)
+                display_name = profile.display_name
+            except:
+                display_name = uid[-4:]  # 若失敗則 fallback 用 user_id
+
+            # 當週平均
+            cursor.execute(
+                "SELECT AVG(srpe) FROM esrp WHERE user_id=? AND timestamp >= ? AND timestamp < ? AND note != '請假'",
+                (uid, this_monday, this_monday + timedelta(days=7))
+            )
+            current_week = cursor.fetchone()[0] or 0
+
+            # 前四週平均
+            cursor.execute(
+                "SELECT AVG(srpe) FROM esrp WHERE user_id=? AND timestamp >= ? AND timestamp < ? AND note != '請假'",
+                (uid, four_weeks_ago, this_monday)
+            )
+            last_4_weeks = cursor.fetchone()[0]
+
+            if last_4_weeks and last_4_weeks > 0:
+                acwr = round(current_week / last_4_weeks, 2)
+                team_acwrs.append(acwr)
+                if acwr > 1.5:
+                    emoji = "🔴"
+                elif acwr > 1.3:
+                    emoji = "🟡"
+                else:
+                    emoji = "🟢"
+                acwr_lines.append(f"{display_name}：{acwr} {emoji}")
+
+        if team_acwrs:
+            team_avg = round(sum(team_acwrs) / len(team_acwrs), 2)
+            if team_avg > 1.5:
+                team_emoji = "🔴"
+            elif team_avg > 1.3:
+                team_emoji = "🟡"
+            else:
+                team_emoji = "🟢"
+            acwr_lines.append(f"\n球隊平均 ACWR：{team_avg} {team_emoji}")
+        else:
+            acwr_lines.append("⚠️ 尚未有足夠資料計算 ACWR")
+
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="\n".join(acwr_lines)))
+        return
+
 
     # 學生 quick reply
     if msg.lower() in ["hi", "嘿", "欸", "誒", "hey"] and role == "球員":
@@ -129,13 +265,16 @@ def handle_message(event):
         return
 
     if msg == "請假":
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-        cursor.execute("INSERT INTO esrp (user_id, srpe, rpe, duration, note, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+        if has_submitted_today(user_id):
+            reply = "⚠️ 您今天已填寫過紀錄，若需修改請使用【校正】功能"
+        else:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            cursor.execute("INSERT INTO esrp (user_id, srpe, rpe, duration, note, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
                        (user_id, 0, 0, 0, "請假", timestamp))
-        conn.commit()
-        reply = "✅ 已登記請假"
+            conn.commit()
+            reply = "✅ 已登記請假"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-        return
+    return
 
     if msg == "查詢":
         cursor.execute("SELECT rpe, duration, srpe, note, timestamp FROM esrp WHERE user_id=? ORDER BY id DESC LIMIT 10", (user_id,))
@@ -149,21 +288,26 @@ def handle_message(event):
         return
 
     # 一般填寫 RPE + 時間
+    # 一般填寫 RPE + 時間
     try:
         parts = msg.split()
         if len(parts) == 2:
-            rpe = int(parts[0])
-            duration = int(parts[1])
-            srpe = rpe * duration
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-            cursor.execute("INSERT INTO esrp (user_id, srpe, rpe, duration, note, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
-                           (user_id, srpe, rpe, duration, "", timestamp))
-            conn.commit()
-            reply = f"✅ 已記錄 SRPE：{srpe} ({rpe}×{duration})"
+            if has_submitted_today(user_id):
+                reply = "⚠️ 您今天已填寫過紀錄，若需修改請使用【校正】功能（例如：校正 6 60）"
+            else:
+                rpe = int(parts[0])
+                duration = int(parts[1])
+                srpe = rpe * duration
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                cursor.execute("INSERT INTO esrp (user_id, srpe, rpe, duration, note, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+                               (user_id, srpe, rpe, duration, "", timestamp))
+                conn.commit()
+                reply = f"✅ 已記錄 SRPE：{srpe} ({rpe}×{duration})"
     except:
         reply = "⚠️ 請輸入格式正確：RPE 時長（如：6 60）或輸入請假 / 校正"
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+
 
 # ====== 每日提醒邏輯 ======
 def remind_players():
