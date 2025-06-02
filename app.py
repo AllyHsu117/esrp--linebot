@@ -1,7 +1,7 @@
 # app.py
 from flask import Flask, request
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from linebot import LineBotApi, WebhookHandler
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, QuickReply, QuickReplyButton, MessageAction
 import schedule
@@ -11,8 +11,13 @@ import os
 
 app = Flask(__name__)
 
-line_bot_api = LineBotApi(os.environ.get("LINE_CHANNEL_ACCESS_TOKEN"))
-handler = WebhookHandler(os.environ.get("LINE_CHANNEL_SECRET"))
+# ===== LINE API 初始化 =====
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET")
+assert LINE_CHANNEL_ACCESS_TOKEN and LINE_CHANNEL_SECRET, "LINE API 環境變數未設定"
+
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # ===== 資料庫初始化 =====
 conn = sqlite3.connect('esrp.db', check_same_thread=False)
@@ -26,13 +31,6 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS esrp (
     note TEXT,
     timestamp TEXT
 )''')
-cursor.execute('''CREATE TABLE IF NOT EXISTS whitelist (
-    user_id TEXT PRIMARY KEY,
-    role TEXT
-)''')
-conn.commit()
-
-# 永久身份驗證（白名單）
 cursor.execute('''CREATE TABLE IF NOT EXISTS whitelist (
     user_id TEXT PRIMARY KEY,
     role TEXT
@@ -55,6 +53,7 @@ def callback():
     except Exception as e:
         print("Handle Error:", e)
     return 'OK'
+
 # ===== 主訊息邏輯 =====
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -93,7 +92,7 @@ def handle_message(event):
         return
 
     # 學生 quick reply
-    if msg.lower() in ["hi", "嘿", "欸", "誒", "hey"] and role == "學生":
+    if msg.lower() in ["hi", "嘿", "欸", "誒", "hey"] and role == "球員":
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
@@ -168,7 +167,7 @@ def handle_message(event):
 
 # ====== 每日提醒邏輯 ======
 def remind_players():
-    cursor.execute("SELECT user_id FROM whitelist WHERE role='學生'")
+    cursor.execute("SELECT user_id FROM whitelist WHERE role='球員'")
     users = cursor.fetchall()
     for (uid,) in users:
         line_bot_api.push_message(uid, TextSendMessage(text="🔔 請填寫今天的 RPE 與運動時間（格式如：6 60）"))
