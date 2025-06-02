@@ -20,7 +20,13 @@ handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # ===== Google Sheets API 初始化 =====
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+import json
+import os
+from google.oauth2 import service_account
+
+GOOGLE_CREDS = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
+creds = service_account.Credentials.from_service_account_info(GOOGLE_CREDS, scopes=SCOPES)
+
 client = gspread.authorize(creds)
 sheet = client.open("SRPE")
 esrp_sheet = sheet.worksheet("srpe")
