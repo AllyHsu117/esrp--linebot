@@ -19,10 +19,11 @@ line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # ===== Google Sheets API 初始化 =====
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
 import json
 import os
 from google.oauth2 import service_account
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 GOOGLE_CREDS = json.loads(os.getenv("GOOGLE_CREDENTIALS"))
 creds = service_account.Credentials.from_service_account_info(GOOGLE_CREDS, scopes=SCOPES)
