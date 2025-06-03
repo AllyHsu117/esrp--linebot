@@ -10,6 +10,7 @@ import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
+
 # ===== Flask & LINE 初始化 =====
 app = Flask(__name__)
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
@@ -247,15 +248,25 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
         return
 
+
     if msg == "查詢":
         records = [r for r in esrp_sheet.get_all_records() if r["user_id"] == user_id]
         last10 = records[-10:][::-1]
+
         if not last10:
             reply = "查無紀錄。"
         else:
-            reply = "\n".join([f"RPE:{r['rpe']} 時長:{r['duration']} SRPE:{r['srpe']} ({r['note']})\n[{r['timestamp']}]" for r in last10])
+            lines = []
+            for r in last10:
+                note = f"（{r['note']}）" if r.get("note") else ""
+                line = f"RPE:{r['rpe']} 時長:{r['duration']} SRPE:{r['srpe']}{note}\n[{r['timestamp']}]"
+                lines.append(line)
+
+            reply = "\n".join(lines)
+
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
         return
+
 
     try:
         parts = msg.split()
