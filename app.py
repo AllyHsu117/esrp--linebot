@@ -71,7 +71,8 @@ def has_submitted_today(user_id):
     return any(row["user_id"] == user_id and row["timestamp"].startswith(today) for row in data)
 
 def write_esrp(user_id, srpe, rpe, duration, note):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # 台灣時間 = UTC + 8 小時
+    timestamp = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M")
     esrp_sheet.append_row([user_id, srpe, rpe, duration, note, timestamp])
 
 def delete_today_esrp(user_id):
@@ -206,7 +207,7 @@ def handle_message(event):
         return
 
     # 學生 quick reply
-    if msg.lower() in ["hi", "嘿", "欸", "誒", "hey"] and role == "球員":
+    if msg.lower() in ["hi", "Hi", "欸", "誒", "hey"] and role == "球員":
         line_bot_api.reply_message(
             event.reply_token,
             TextSendMessage(
@@ -274,21 +275,17 @@ def handle_message(event):
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
 # ===== 每日提醒排程 =====
-def remind_players():
-    rows = whitelist_sheet.get_all_records()
-    for row in rows:
-        if row["role"] == "球員":
-            uid = row["user_id"]
-            line_bot_api.push_message(uid, TextSendMessage(text="🔔 請填寫今天的 RPE 與運動時間（格式如：6 60）"))
-
 from flask import Flask, request
-from datetime import datetime
 from linebot.models import TextSendMessage
+from datetime import datetime, timedelta
 
 @app.route("/daily_remind", methods=["GET"])
 def daily_remind():
-    now = datetime.now()
-    if now.hour == 22:
+    now = datetime.utcnow() + timedelta(hours=8)  # 台灣時間
+    taiwan_hour = now.hour
+    weekday = now.weekday()  # 0=週一, 6=週日
+
+    if 13 <= taiwan_hour < 14 and weekday < 5:  # 週一到週五 22:00-22:59
         try:
             rows = whitelist_sheet.get_all_records()
             for row in rows:
@@ -298,11 +295,12 @@ def daily_remind():
                         uid,
                         TextSendMessage(text="🔔 請填寫今天的 sRPE 數值與運動時間（格式如：6 60）")
                     )
-            return "✅ Reminded all players at 22:00"
+            return "✅ 已於台灣時間 22:00-23:00 推播提醒"
         except Exception as e:
             return f"❌ 發送提醒時出錯：{e}"
     else:
-        return f"⌛ 現在不是推播時間：{now.strftime('%H:%M:%S')}"
+        return f"⌛ 現在非推播時間（目前台灣時間：{now.strftime('%Y-%m-%d %H:%M:%S')}）"
+
 
 
 # ===== 啟動服務 =====
