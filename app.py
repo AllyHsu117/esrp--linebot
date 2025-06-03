@@ -300,7 +300,46 @@ def daily_remind():
             return f"❌ 發送提醒時出錯：{e}"
     else:
         return f"⌛ 現在非推播時間（目前台灣時間：{now.strftime('%Y-%m-%d %H:%M:%S')}）"
+    
+@app.route("/coach_daily_report", methods=["GET"])
+def coach_daily_report():
+    now = datetime.utcnow() + timedelta(hours=8)  # 台灣時間
+    today_str = now.strftime("%Y-%m-%d")
 
+    # 限定執行時間為 23:30～23:59，避免 Apps Script 提前觸發
+    if not (now.hour == 23 and now.minute >= 30):
+        return f"⌛ 現在非推播時間（目前台灣時間：{now.strftime('%Y-%m-%d %H:%M:%S')}）"
+
+    try:
+        data = esrp_sheet.get_all_records()
+        whitelist = whitelist_sheet.get_all_records()
+
+        # 篩選出教練 ID
+        coach_ids = [row["user_id"] for row in whitelist if row["role"] == "教練"]
+        # 建立 user_id 對應球員名字的字典
+        players = {row["user_id"]: row["name"] for row in whitelist if row["role"] == "球員"}
+
+        # 只取今天的資料
+        today_data = [row for row in data if row["date"].startswith(today_str)]
+
+        if not today_data:
+            message = f"📋 今日（{today_str}）尚無球員填寫 sRPE 資料"
+        else:
+            message = f"📋 今日（{today_str}）sRPE 回報彙整：\n"
+            for row in today_data:
+                name = players.get(row["user_id"], "未知球員")
+                message += f"{name}\nRPE:{row['rpe']} 時長:{row['duration']} SRPE:{row['srpe']}"
+                if row.get("note") == "校正":
+                    message += "（校正）"
+                message += f"\n[{row['timestamp']}]\n"
+
+        # 推播給所有教練
+        for coach_id in coach_ids:
+            line_bot_api.push_message(coach_id, TextSendMessage(text=message))
+
+        return "✅ 教練推播完成"
+    except Exception as e:
+        return f"❌ 發送 coach 報表出錯：{e}"
 
 
 # ===== 啟動服務 =====
