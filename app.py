@@ -285,7 +285,7 @@ def daily_remind():
     taiwan_hour = now.hour
     weekday = now.weekday()  # 0=週一, 6=週日
 
-    if 13 <= taiwan_hour < 14 and weekday < 5:  # 週一到週五 22:00-22:59
+    if 22 <= taiwan_hour < 23 and weekday < 5:  # 週一到週五 22:00-22:59
         try:
             rows = whitelist_sheet.get_all_records()
             for row in rows:
