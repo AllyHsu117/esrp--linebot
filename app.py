@@ -295,22 +295,31 @@ def daily_remind():
     now = datetime.utcnow() + timedelta(hours=8)  # 台灣時間
     taiwan_hour = now.hour
     weekday = now.weekday()  # 0=週一, 6=週日
+    today_str = now.strftime("%Y-%m-%d")
 
     if 22 <= taiwan_hour < 23 and weekday < 5:  # 週一到週五 22:00-22:59
         try:
             rows = whitelist_sheet.get_all_records()
+            srpe_records = esrp_sheet.get_all_records()  # ⚠️ 用 esrp_sheet
             for row in rows:
                 if row["role"] == "球員":
                     uid = row["user_id"]
-                    line_bot_api.push_message(
-                        uid,
-                        TextSendMessage(text="🔔 請填寫今天的 sRPE 數值與運動時間（格式如：6 60）")
+                    # 檢查是否已有今日紀錄（用 timestamp 判斷）
+                    already_filled = any(
+                        r["user_id"] == uid and r.get("timestamp", "").startswith(today_str)
+                        for r in srpe_records
                     )
-            return "✅ 已於台灣時間 22:00-23:00 推播提醒"
+                    if not already_filled:
+                        line_bot_api.push_message(
+                            uid,
+                            TextSendMessage(text="🔔 請填寫今天的 sRPE 數值與運動時間（格式如：6 60）")
+                        )
+            return "✅ 已於台灣時間 22:00-23:00 推播提醒（跳過已填者）"
         except Exception as e:
             return f"❌ 發送提醒時出錯：{e}"
     else:
         return f"⌛ 現在非推播時間（目前台灣時間：{now.strftime('%Y-%m-%d %H:%M:%S')}）"
+
     
 @app.route("/coach_daily_report", methods=["GET"])
 def coach_daily_report():
@@ -318,7 +327,7 @@ def coach_daily_report():
     today_str = now.strftime("%Y-%m-%d")
 
     # 限定執行時間為 23:30～23:59，避免 Apps Script 提前觸發
-    if not (now.hour == 23 and now.minute >= 30):
+    if now.hour == 23:
         return f"⌛ 現在非推播時間（目前台灣時間：{now.strftime('%Y-%m-%d %H:%M:%S')}）"
 
     try:
