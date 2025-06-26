@@ -328,7 +328,7 @@ def coach_daily_report():
 
     # 限定執行時間為 23:30～23:59，避免 Apps Script 提前觸發
     # 限定執行時間為 23:00～23:59，避免 Apps Script 提前觸發
-    if not (14 <= now.hour < 15 and now.weekday() < 5):
+    if not (23 <= now.hour < 24 and now.weekday() < 5):
         return f"⌛ 現在非推播時間（目前台灣時間：{now.strftime('%Y-%m-%d %H:%M:%S')}）"
 
 
