@@ -342,7 +342,11 @@ def coach_daily_report():
         players = {row["user_id"]: row["name"] for row in whitelist if row["role"] == "球員"}
 
         # 只取今天的資料
-        today_data = [row for row in data if row["date"].startswith(today_str)]
+        today_data = [
+    row for row in data
+    if "timestamp" in row and isinstance(row["timestamp"], str) and row["timestamp"].startswith(today_str)
+]
+
 
         if not today_data:
             message = f"📋 今日（{today_str}）尚無球員填寫 sRPE 資料"
