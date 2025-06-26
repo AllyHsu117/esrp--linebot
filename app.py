@@ -327,8 +327,10 @@ def coach_daily_report():
     today_str = now.strftime("%Y-%m-%d")
 
     # 限定執行時間為 23:30～23:59，避免 Apps Script 提前觸發
-    if not (now.hour == 23 and now.weekday() < 5):
+    # 限定執行時間為 23:00～23:59，避免 Apps Script 提前觸發
+    if not (14 <= now.hour < 15 and now.weekday() < 5):
         return f"⌛ 現在非推播時間（目前台灣時間：{now.strftime('%Y-%m-%d %H:%M:%S')}）"
+
 
     try:
         data = esrp_sheet.get_all_records()
